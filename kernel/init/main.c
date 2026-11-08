@@ -44,6 +44,12 @@
 
 void KiRunSelfTests(void);
 void KdStartShell(void);
+void IoInitSystem(void);
+void CcInitialize(void);
+void CcStartLazyWriter(void);
+void AtaInitialize(void);
+void AhciInitialize(void);
+void FdcInitialize(void);
 static void *g_boot_stack;
 NORETURN void KiSystemStartup(void);
 
@@ -272,12 +278,19 @@ NORETURN static void KiSystemStartupPhase1(void)
     print_platform();
     HalInitPci();
 
+    IoInitSystem();
+    CcInitialize();
+    AtaInitialize();
+    AhciInitialize();
+    FdcInitialize();
+    CcStartLazyWriter();
+
     maybe_crash();
 
     if (RtlGetCmdlineOption(KiGetCommandLine(), "xenon.selftest", NULL, 0))
         KiRunSelfTests();
 
-    ConPrint("\nPhase 1.2 complete: threads, scheduler, DPCs, waits, objects and handles are up.\n");
+    ConPrint("\nPhase 1.3 complete: I/O manager, IDE, SATA and floppy drivers, partitions and disk cache are up.\n");
     ConPrint("The shell (C:/#) arrives in Phase 1.5.\n");
     if (g_test_mode && !RtlGetCmdlineOption(KiGetCommandLine(), "xenon.interactive", NULL, 0))
         HalDebugExit(XENON_EXIT_HALTED);

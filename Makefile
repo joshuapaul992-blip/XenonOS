@@ -32,7 +32,7 @@ NASMFLAGS := -f elf64 -g -F dwarf
 LDFLAGS := -m elf_x86_64 -nostdlib -static -z max-page-size=0x1000 \
     -z noexecstack --no-dynamic-linker -T kernel/linker.ld
 
-KERNEL_C   := $(shell find kernel -name '*.c' | sort)
+KERNEL_C   := $(shell find kernel drivers -name '*.c' | sort)
 KERNEL_ASM := $(shell find kernel -name '*.asm' | sort)
 KERNEL_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(KERNEL_C)) $(patsubst %.asm,$(BUILD)/%.asm.o,$(KERNEL_ASM))
 

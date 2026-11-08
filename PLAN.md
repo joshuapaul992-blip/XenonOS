@@ -1,7 +1,7 @@
 # XenonOS — Milestone 1 Plan
 
 **Target release:** `XenonOS 0.0.1 (build N)`
-**Status:** Phase 1.2 complete (build 8)
+**Status:** Phase 1.3 complete (build 13)
 **Scope of Milestone 1:** A bootable, from-scratch x86-64 operating system with an NT-style kernel architecture,
 native FAT12/16/32 drive letters (A:–Z:), USB 1.x/2.0/3.x (storage, keyboard, mouse), a TCP/IP stack, and a
 "smart" POSIX-style shell with ~70 built-in commands.

@@ -392,3 +392,35 @@ HAL_PCI_DEVICE *HalPciFindClass(uint8_t cls, uint8_t sub, uint8_t pi, unsigned n
     }
     return NULL;
 }
+
+/* ---- Bus mastering and MSI ------------------------------------------------ */
+
+void HalPciEnableBusMaster(const HAL_PCI_DEVICE *d)
+{
+    uint16_t cmd = HalPciRead16(d, 0x04);
+    HalPciWrite16(d, 0x04, cmd | 0x0006);      /* memory space + bus master */
+}
+
+/* Route the device's MSI to 'vector' on this CPU. Returns false if the device
+   has no MSI capability. Legacy INTx is turned off. */
+bool HalPciEnableMsi(const HAL_PCI_DEVICE *d, uint8_t vector)
+{
+    if (!d->MsiCap)
+        return false;
+    uint8_t c = d->MsiCap;
+    uint16_t ctrl = HalPciRead16(d, c + 2);
+    bool is64 = ctrl & (1u << 7);
+    uint32_t addr = 0xFEE00000u | (HalGetCurrentApicId() << 12);
+    HalPciWrite32(d, c + 4, addr);
+    if (is64) {
+        HalPciWrite32(d, c + 8, 0);
+        HalPciWrite16(d, c + 12, vector);
+    } else {
+        HalPciWrite16(d, c + 8, vector);
+    }
+    ctrl &= ~(uint16_t)(7u << 4);               /* one message */
+    HalPciWrite16(d, c + 2, ctrl | 1);          /* enable */
+    uint16_t cmd = HalPciRead16(d, 0x04);
+    HalPciWrite16(d, 0x04, cmd | (1u << 10));   /* INTx off */
+    return true;
+}

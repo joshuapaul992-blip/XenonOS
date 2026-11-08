@@ -187,3 +187,10 @@ static inline void HalWriteMsr(uint32_t msr, uint64_t v)
     __asm__ volatile("wrmsr" :: "c"(msr), "a"((uint32_t)v), "d"((uint32_t)(v >> 32)));
 }
 void     HalTscSetFrequency(uint64_t hz);
+void     HalPciEnableBusMaster(const HAL_PCI_DEVICE *d);
+bool     HalPciEnableMsi(const HAL_PCI_DEVICE *d, uint8_t vector);
+
+/* ---- ISA DMA (hal/isadma.c) ---------------------------------------------- */
+/* Program 8237 channel 0-3 for one transfer. to_memory = device -> memory.
+   The buffer must be below 16 MiB and must not cross a 64 KiB boundary. */
+bool     HalIsaDmaStart(unsigned channel, uint64_t phys, uint32_t length, bool to_memory);

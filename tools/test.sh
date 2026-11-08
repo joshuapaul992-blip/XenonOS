@@ -1,5 +1,5 @@
 #!/bin/sh
-# XenonOS automated tests (Phases 1.0 to 1.2).
+# XenonOS automated tests (Phases 1.0 to 1.3).
 #
 # Uses the image from the last "make image" (it does not build a new image,
 # so running the tests does not change the build number). Each boot runs on a
@@ -68,7 +68,7 @@ expect_boot() {
     [ "$STATUS" = skip ] && return
     log=$OUT/$name.log
     missing=""
-    for want in "$BANNER" "on $fwtext" "Phase 1.2 complete" "$@"; do
+    for want in "$BANNER" "on $fwtext" "Phase 1.3 complete" "$@"; do
         grep -qF -- "$want" "$log" || missing="$missing '$want'"
     done
     selftest=$(grep -o "SELFTEST: [0-9]* passed, [0-9]* failed" "$log" | tail -1)
@@ -188,7 +188,7 @@ echo "debug shell:"
 expect_session kd-serial serial "" -- \
     'objdir \' 'objdir \ObjectTypes' 'objdir \DosDevices' threads ps 'threadtest 100' uptime mem irq exit -- \
     'Directory of \' 'DosDevices               SymbolicLink   -> \GLOBAL??' \
-    'Thread                   Type' 'Directory of \GLOBAL??' 'KdShell' '    4       1       0  System' \
+    'Thread                   Type' 'Directory of \GLOBAL??' 'KdShell' '       0  System' \
     'threadtest: 100 threads finished, 1000 mutex acquisitions (expected 1000)' 'clock' 'Leaving the test run.'
 expect_session kd-ps2 ps2 "" -- \
     ver 'objdir \Device' 'Sleep 20' exit -- \
@@ -200,7 +200,14 @@ if [ -n "$OVMF" ]; then
         "$BANNER" 'KdShell' 'Leaving the test run.'
 fi
 
-# 5. Stop screen
+# 5. Storage: raw sector reads and writes on IDE, SATA and floppy disks
+echo "storage:"
+"$ROOT/tools/test-storage.py" > "$OUT/storage.out" 2>&1
+grep -E "PASS|FAIL|^       \|" "$OUT/storage.out" | grep -v "^storage:"
+PASS=$((PASS + $(grep -c "PASS" "$OUT/storage.out")))
+FAIL=$((FAIL + $(grep -c "FAIL" "$OUT/storage.out")))
+
+# 6. Stop screen
 echo "stop screen:"
 expect_crash pagefault 0x00000050 PAGE_FAULT_IN_NONPAGED_AREA
 expect_crash divide    0x0000001E "(0x00000000C0000094"

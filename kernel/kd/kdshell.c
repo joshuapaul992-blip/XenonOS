@@ -18,6 +18,14 @@
 #include <xenon/version.h>
 
 void KdInitializeInput(void);
+void KdCmdDisks(int, char **);
+void KdCmdVolumes(int, char **);
+void KdCmdHexdump(int, char **);
+void KdCmdCrc32(int, char **);
+void KdCmdWritetest(int, char **);
+void KdCmdCache(int, char **);
+void KdCmdSync(int, char **);
+void IoShutdownSystem(void);
 int KdGetChar(int64_t timeout_ns);
 
 #define MAX_LINE 256
@@ -321,6 +329,7 @@ static void cmd_crash(int argc, char **argv)
 static void cmd_reboot(int argc, char **argv)
 {
     UNUSED(argc); UNUSED(argv);
+    IoShutdownSystem();
     ConPrint("Rebooting...\n");
     HalReboot();
 }
@@ -329,6 +338,7 @@ static void cmd_exit(int argc, char **argv)
 {
     UNUSED(argc); UNUSED(argv);
     if (KiTestMode()) {
+        IoShutdownSystem();
         ConPrint("Leaving the test run.\n");
         HalDebugExit(XENON_EXIT_HALTED);
     }
@@ -357,6 +367,13 @@ static const struct {
     { "date",       cmd_date,       "read the real-time clock" },
     { "irq",        cmd_irq,        "interrupt counts per vector" },
     { "pci",        cmd_pci,        "list PCI devices" },
+    { "disks",      KdCmdDisks,     "list disks and floppy drives" },
+    { "volumes",    KdCmdVolumes,   "list partitions (volume devices)" },
+    { "hexdump",    KdCmdHexdump,   "hexdump <device> [lba]  show one sector" },
+    { "crc32",      KdCmdCrc32,     "crc32 <device> [lba [count]]  checksum sectors" },
+    { "writetest",  KdCmdWritetest, "writetest <device> <lba> <count> <seed>" },
+    { "cache",      KdCmdCache,     "block cache statistics" },
+    { "sync",       KdCmdSync,      "write all cached disk data" },
     { "threadtest", cmd_threadtest, "threadtest [n]  run n threads that share a mutex" },
     { "sleep",      cmd_sleep,      "sleep [ms]" },
     { "clear",      cmd_clear,      "clear the screen" },
