@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Storage tests (Phase 1.3): raw sector reads and writes on IDE, SATA (AHCI)
 and floppy disks, through whole disks and through partitions.
 

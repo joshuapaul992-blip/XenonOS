@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ob - handle tables.
  *

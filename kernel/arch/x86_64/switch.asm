@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: MIT
 ; XenonOS - thread context switch.
 bits 64
 section .text

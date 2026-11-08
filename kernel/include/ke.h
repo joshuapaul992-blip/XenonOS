@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ke - kernel core: stop screen, IRQL, spin locks, interrupts, DPCs,
  * dispatcher objects (events, mutexes, semaphores, timers, threads), waits

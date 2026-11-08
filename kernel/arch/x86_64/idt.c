@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * IDT setup and first-level interrupt dispatch.
  */

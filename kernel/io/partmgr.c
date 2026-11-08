@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Partition manager (\Driver\partmgr).
  *

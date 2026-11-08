@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Kd - keyboard input for the kernel debug shell.
  *

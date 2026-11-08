@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Run XenonOS in QEMU.
 #
 #   tools/run-qemu.sh [--uefi] [--q35] [--headless] [--img FILE] [-- extra qemu args]

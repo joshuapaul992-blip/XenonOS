@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Io - internal definitions shared by the disk class, cache and partition manager. */
 #pragma once
 #include "io.h"

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Boot a copy of the current image headless and save a PNG of the screen.
 #
 #   tools/screenshot.sh <output.png> ["kernel cmdline"] [--uefi] [--wait SECONDS]

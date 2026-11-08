@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # XenonOS build
 #
 #   make            same as "make image"

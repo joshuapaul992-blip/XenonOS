@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ke - bugcheck (the "stop screen").
  *

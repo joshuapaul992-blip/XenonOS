@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: MIT
 ; XenonOS - x86-64 interrupt entry stubs.
 ;
 ; Every vector gets a small stub that pushes an error code (0 if the CPU did

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ke - IRQL, DPCs, the scheduler and the clock tick.
  *

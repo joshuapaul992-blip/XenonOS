@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ob - objects, reference counts and the object namespace.
  *

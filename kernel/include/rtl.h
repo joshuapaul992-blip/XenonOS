@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Rtl - kernel runtime library (strings, memory, formatting).
  */

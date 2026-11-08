@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * HAL - legacy 8259 PIC.
  *

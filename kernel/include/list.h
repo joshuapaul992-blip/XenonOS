@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Doubly linked lists (NT style LIST_ENTRY).
  */

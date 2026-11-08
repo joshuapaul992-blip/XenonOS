@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: MIT
 ; XenonOS - switch to a new stack and continue in a function that never returns.
 bits 64
 section .text

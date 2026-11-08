@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Build a bootable XenonOS hard-disk image.
 #
 #   usage: tools/mkimage.sh <kernel.elf> <output.img>

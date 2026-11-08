@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Rtl - string and memory routines.
  *

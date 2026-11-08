@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* CRC-32 (IEEE 802.3, the one zlib, GPT and gzip use). */
 #include "xenon.h"
 

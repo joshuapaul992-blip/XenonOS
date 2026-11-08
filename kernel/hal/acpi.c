@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * HAL - ACPI static tables.
  *

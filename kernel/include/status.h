@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * NTSTATUS codes used by the kernel (same values as Windows NT).
  */

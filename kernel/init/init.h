@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Kernel initialisation. */
 #pragma once
 #include "xenon.h"

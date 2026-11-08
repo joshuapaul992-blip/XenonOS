@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Self-tests for Phase 1.2: IRQL and DPCs, dispatcher objects, waits,
  * timers, the scheduler, and the object manager.

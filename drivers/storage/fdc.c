@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Floppy disk controller driver (\Driver\fdc), for 82077AA-compatible
  * controllers at the standard ports 0x3F0-0x3F7.

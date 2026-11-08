@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ps - processes and threads (executive layer over the Ke thread).
  *

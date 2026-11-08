@@ -194,7 +194,12 @@ tools/               build, image, QEMU, test (incl. test-storage.py), session a
 third_party/         Terminus font sources and license; Limine (downloaded)
 ```
 
-## Licenses of third-party parts
+## License
+
+XenonOS is released under the [MIT License](LICENSE), Copyright (c) 2026 XenonOS Project.
+Each source file carries an `SPDX-License-Identifier` line.
+
+Third-party parts keep their own licenses:
 
 - **Limine** bootloader (BSD-2-Clause), downloaded by `tools/fetch-limine.sh`. `kernel/include/limine.h` is
   copied from it (0BSD).

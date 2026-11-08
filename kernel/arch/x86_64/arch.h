@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* x86-64 architecture definitions. */
 #pragma once
 #include "xenon.h"

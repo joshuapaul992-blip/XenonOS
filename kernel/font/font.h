@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Bitmap console fonts built into the kernel. */
 #pragma once
 

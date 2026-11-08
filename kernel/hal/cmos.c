@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * HAL - CMOS real-time clock, plus date conversion helpers.
  *

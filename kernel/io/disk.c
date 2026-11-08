@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Disk class driver (\Driver\disk).
  *

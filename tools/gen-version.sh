@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Generate build/include/xenon/version.h from VERSION and BUILD_NUMBER.
 # The file is only rewritten when its contents change.
 set -eu

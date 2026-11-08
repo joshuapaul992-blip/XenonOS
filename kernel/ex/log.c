@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ex - kernel log ring buffer (what "dmesg" shows).
  *

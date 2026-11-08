@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * HAL - 8237 ISA DMA controller (channels 0-3, 8-bit). The floppy controller
  * uses channel 2.

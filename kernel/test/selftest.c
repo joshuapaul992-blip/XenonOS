@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Kernel self-tests, run at boot when the command line has "xenon.selftest".
  *

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * XenonOS kernel - common definitions.
  */

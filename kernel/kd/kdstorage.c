@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Kd - storage commands for the kernel debug shell.
  *

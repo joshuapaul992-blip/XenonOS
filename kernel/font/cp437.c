@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Unicode code point of every CP437 character (generated from tools/psf2c.py). */
 #include <stdint.h>
 

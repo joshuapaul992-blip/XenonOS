@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Download the pinned Limine binary release into third_party/limine and build
 # its host-side installer. Does nothing if it is already there.
 set -eu

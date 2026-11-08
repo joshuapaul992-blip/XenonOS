@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Kernel console: framebuffer text console + serial mirror.
  */

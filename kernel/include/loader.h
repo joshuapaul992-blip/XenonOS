@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Loader block: everything the kernel needs from the bootloader, copied into
  * kernel memory at the very start of boot (like NT's LOADER_PARAMETER_BLOCK).

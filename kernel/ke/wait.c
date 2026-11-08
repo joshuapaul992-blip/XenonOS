@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Ke - dispatcher objects, waiting and kernel timers.
  *

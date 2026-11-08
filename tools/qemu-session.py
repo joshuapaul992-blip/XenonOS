@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Drive a XenonOS shell over the serial port.
 
 Boots a throw-away copy of the disk image, waits for the prompt, types each

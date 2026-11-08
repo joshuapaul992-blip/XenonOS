@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Names of NTSTATUS codes, for messages. */
 #include "status.h"
 

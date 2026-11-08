@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * HAL - time source for early boot.
  *

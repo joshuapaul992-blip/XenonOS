@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # Increment the build number. Called once by every "make image".
 #
 # BUILD_NUMBER holds the number of the most recent image build, so a fresh

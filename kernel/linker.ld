@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* XenonOS kernel linker script: higher-half kernel loaded by Limine. */
 OUTPUT_FORMAT(elf64-x86-64)
 ENTRY(KiSystemStartup)

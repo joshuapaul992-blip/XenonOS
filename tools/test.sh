@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # XenonOS automated tests (Phases 1.0 to 1.3).
 #
 # Uses the image from the last "make image" (it does not build a new image,

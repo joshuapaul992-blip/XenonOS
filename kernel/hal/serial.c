@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * HAL - 16550 UART driver (COM1), used for the kernel debug log.
  */
