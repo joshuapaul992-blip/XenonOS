@@ -25,7 +25,7 @@ printf 'timeout: 0\n\n/XenonOS\n    protocol: limine\n    path: boot():/XenonOS/
 [ -n "${RESOLUTION:-}" ] && printf '    resolution: %s\n' "$RESOLUTION" >> "$WORK/limine.conf"
 mcopy -o -i "$WORK/disk.img@@1M" "$WORK/limine.conf" ::/boot/limine/limine.conf
 # shellcheck disable=SC2086
-qemu-system-x86_64 -m 256M $FW -drive file="$WORK/disk.img",format=raw,if=ide \
+qemu-system-x86_64 -m 256M $FW ${QEMU_EXTRA:-} -drive file="$WORK/disk.img",format=raw,if=ide \
     -display none -serial null -monitor unix:"$WORK/mon.sock",server,nowait &
 QPID=$!
 python3 - "$WORK/mon.sock" "$WORK/screen.ppm" "$WAIT" <<'PY'

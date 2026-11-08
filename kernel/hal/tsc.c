@@ -11,7 +11,8 @@
 #define CALIBRATE_MS  20u
 
 static uint64_t g_tsc_hz;
-static uint64_t g_tsc_boot;
+static uint64_t g_tsc_boot;     /* TSC value at g_ns_base */
+static uint64_t g_ns_base;      /* nanoseconds since boot at g_tsc_boot */
 
 uint64_t HalCalibrateTsc(void)
 {
@@ -59,7 +60,20 @@ uint64_t HalGetTimeNs(void)
     if (!g_tsc_hz)
         return 0;
     uint64_t t = rdtsc() - g_tsc_boot;
-    return (t / g_tsc_hz) * 1000000000ull + (t % g_tsc_hz) * 1000000000ull / g_tsc_hz;
+    return g_ns_base + (t / g_tsc_hz) * 1000000000ull + (t % g_tsc_hz) * 1000000000ull / g_tsc_hz;
+}
+
+/* Switch to a more accurate TSC frequency without making the clock jump. */
+void HalTscSetFrequency(uint64_t hz)
+{
+    uint64_t flags = read_rflags();
+    cpu_cli();
+    uint64_t now_ns = HalGetTimeNs();
+    g_tsc_boot = rdtsc();
+    g_ns_base = now_ns;
+    g_tsc_hz = hz;
+    if (flags & (1u << 9))
+        cpu_sti();
 }
 
 void HalStallMs(unsigned ms)

@@ -22,13 +22,24 @@ SECTIONS
     } :limine_requests
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
-    .text : { *(.text .text.*) } :text
+    .text : {
+        __text_start = .;
+        *(.text .text.*)
+        __text_end = .;
+    } :text
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
-    .rodata : { *(.rodata .rodata.*) } :rodata
+    .rodata : {
+        __rodata_start = .;
+        *(.rodata .rodata.*)
+        __rodata_end = .;
+    } :rodata
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
-    .data : { *(.data .data.*) } :data
+    .data : {
+        __data_start = .;
+        *(.data .data.*)
+    } :data
     .bss : {
         *(.bss .bss.*)
         *(COMMON)

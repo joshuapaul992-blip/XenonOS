@@ -19,3 +19,5 @@ extern uint64_t KiIsrTable[256];                                    /* isr.asm *
 
 /* Legacy 8259 PIC: remapped to vectors 0x20-0x2F and fully masked. */
 void HalPicInitMasked(void);
+
+NORETURN void KiSwitchStack(void *stack_top, void (*continuation)(void));   /* stack.asm */

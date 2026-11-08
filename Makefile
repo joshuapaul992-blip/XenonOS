@@ -22,7 +22,7 @@ VERSION_H := $(BUILD)/include/xenon/version.h
 LIMINE  := third_party/limine
 
 CFLAGS := -std=gnu11 -O2 -g -pipe \
-    -Wall -Wextra -Werror -Wno-unused-parameter \
+    -Wall -Wextra -Werror -Wno-unused-parameter -Wno-multichar \
     -ffreestanding -fno-builtin -fno-stack-protector -fno-stack-check -fno-lto \
     -fno-pic -fno-pie -fno-omit-frame-pointer -fno-strict-aliasing \
     -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 \

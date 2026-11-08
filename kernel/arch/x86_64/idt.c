@@ -6,6 +6,8 @@
 #include "arch.h"
 #include "console.h"
 
+void KiDispatchDeviceInterrupt(KTRAP_FRAME *f);
+
 typedef struct PACKED {
     uint16_t OffsetLow;
     uint16_t Selector;
@@ -82,9 +84,5 @@ void KiDispatchInterrupt(KTRAP_FRAME *f)
         }
     }
 
-    /* Hardware interrupts are not enabled until Phase 1.1. A spurious one from
-       the legacy PIC (IRQ 7 / 15 -> vectors 0x27 / 0x2F) is simply ignored. */
-    if (v == 0x27 || v == 0x2F || v == 0xFF)
-        return;
-    DbgPrint("Ke: unexpected interrupt, vector 0x%llx", (unsigned long long)v);
+    KiDispatchDeviceInterrupt(f);
 }
