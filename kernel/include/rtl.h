@@ -21,3 +21,9 @@ int snprintf(char *buf, size_t size, const char *fmt, ...) PRINTF_LIKE(3, 4);
 
 /* Find "key=value" in a space-separated command line. Copies value into out. */
 bool RtlGetCmdlineOption(const char *cmdline, const char *key, char *out, size_t outsize);
+int    tolower(int c);
+int    toupper(int c);
+int    strcasecmp(const char *a, const char *b);
+int    strncasecmp(const char *a, const char *b, size_t n);
+char  *strrchr(const char *s, int c);
+int    atoi(const char *s);

@@ -14,6 +14,7 @@
 #include <xenon/version.h>
 
 static volatile int g_in_bugcheck;
+extern volatile bool KiConsoleBypassLock;
 
 static const char *stop_name(uint32_t code)
 {
@@ -72,6 +73,8 @@ NORETURN void KeBugCheckWithFrame(uint32_t code, uint64_t p1, uint64_t p2, uint6
                                   const KTRAP_FRAME *f)
 {
     cpu_cli();
+    __asm__ volatile("mov %0, %%cr8" :: "r"((uint64_t)HIGH_LEVEL));
+    KiConsoleBypassLock = true;
     if (__atomic_exchange_n(&g_in_bugcheck, 1, __ATOMIC_SEQ_CST)) {
         /* Crashed while showing the crash screen: just stop. */
         HalSerialWrite("\n*** nested bugcheck, halting\n", 30);
@@ -89,6 +92,10 @@ NORETURN void KeBugCheckWithFrame(uint32_t code, uint64_t p1, uint64_t p2, uint6
              (unsigned long long)p3, (unsigned long long)p4);
     ConPrint("%s\n\n", stop_name(code));
     ConPrint("%s has stopped to prevent damage to your computer.\n\n", XENON_VERSION_STR);
+    KTHREAD *thread = KeGetCurrentThread();
+    if (thread)
+        ConPrint("Thread: %s (TID %llu)\n", thread->Name, (unsigned long long)thread->Cid);
+
 
     if (f) {
         ConPrint("Exception: %s (vector %llu, error code 0x%llx)\n",

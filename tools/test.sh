@@ -1,5 +1,5 @@
 #!/bin/sh
-# XenonOS automated tests (Phases 1.0 and 1.1).
+# XenonOS automated tests (Phases 1.0 to 1.2).
 #
 # Uses the image from the last "make image" (it does not build a new image,
 # so running the tests does not change the build number). Each boot runs on a
@@ -68,7 +68,7 @@ expect_boot() {
     [ "$STATUS" = skip ] && return
     log=$OUT/$name.log
     missing=""
-    for want in "$BANNER" "on $fwtext" "Phase 1.1 complete" "$@"; do
+    for want in "$BANNER" "on $fwtext" "Phase 1.2 complete" "$@"; do
         grep -qF -- "$want" "$log" || missing="$missing '$want'"
     done
     selftest=$(grep -o "SELFTEST: [0-9]* passed, [0-9]* failed" "$log" | tail -1)
@@ -152,7 +152,55 @@ expect_boot usb-net       q35 bios "BIOS" "-device qemu-xhci -device usb-ehci -d
     "USB 3.x controller (xHCI)" "USB 2.0 controller (EHCI)" "USB 1.1 controller (UHCI)" "USB 1.1 controller (OHCI)" \
     "8086:100e Intel Ethernet controller" "10ec:8139 Realtek Ethernet controller"
 
-# 4. Stop screen
+# 4. Kernel debug shell, driven over COM1 and the PS/2 keyboard
+# expect_session NAME INPUT "qemu args" -- command... -- expected text...
+expect_session() {
+    name=$1 input=$2 qargs=$3
+    shift 3; [ "$1" = "--" ] && shift
+    cmds=""; n=0
+    while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+        n=$((n + 1)); eval "cmd_$n=\$1"; shift
+    done
+    [ "$1" = "--" ] && shift
+    set -- "$@"
+    log=$OUT/$name.log
+    i=1; argv=""
+    # Rebuild the command list as positional arguments for qemu-session.py.
+    session_args() {
+        j=1
+        while [ $j -le $n ]; do eval "printf '%s\\0' \"\$cmd_$j\""; j=$((j + 1)); done
+    }
+    session_args | xargs -0 "$ROOT/tools/qemu-session.py" --input "$input" --qemu-args "$qargs" \
+        --log "$log" --timeout 60 >/dev/null 2>&1
+    st=$?
+    missing=""
+    for want in "$@"; do
+        grep -qF -- "$want" "$log" || missing="$missing '$want'"
+    done
+    if [ $st = 0 ] && [ -z "$missing" ]; then
+        ok "$name: $n commands typed over $input, output as expected"
+    else
+        bad "$name: session status $st${missing:+, missing:$missing}" "$log"
+    fi
+}
+
+echo "debug shell:"
+expect_session kd-serial serial "" -- \
+    'objdir \' 'objdir \ObjectTypes' 'objdir \DosDevices' threads ps 'threadtest 100' uptime mem irq exit -- \
+    'Directory of \' 'DosDevices               SymbolicLink   -> \GLOBAL??' \
+    'Thread                   Type' 'Directory of \GLOBAL??' 'KdShell' '    4       1       0  System' \
+    'threadtest: 100 threads finished, 1000 mutex acquisitions (expected 1000)' 'clock' 'Leaving the test run.'
+expect_session kd-ps2 ps2 "" -- \
+    ver 'objdir \Device' 'Sleep 20' exit -- \
+    "$BANNER" 'Directory of \Device' 'slept 2' 'Leaving the test run.'
+OVMF=$(find_ovmf)
+if [ -n "$OVMF" ]; then
+    expect_session kd-ps2-uefi ps2 "-bios $OVMF" -- \
+        ver threads exit -- \
+        "$BANNER" 'KdShell' 'Leaving the test run.'
+fi
+
+# 5. Stop screen
 echo "stop screen:"
 expect_crash pagefault 0x00000050 PAGE_FAULT_IN_NONPAGED_AREA
 expect_crash divide    0x0000001E "(0x00000000C0000094"

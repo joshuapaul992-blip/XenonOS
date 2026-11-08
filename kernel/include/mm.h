@@ -72,6 +72,7 @@ void  MmUnmapIoSpace(void *va, size_t size);
 
 /* Kernel stacks with an unmapped guard page below them. Returns the top. */
 void *MmCreateKernelStack(size_t size);
+void  MmFreeKernelStack(void *top, size_t size);
 
 /* Boot: build the kernel's own page tables and switch to them. */
 void MmInitSystem(void);

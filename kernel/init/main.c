@@ -11,13 +11,17 @@
  *
  *   KiSystemStartupPhase1 (on the kernel stack)
  *     - give Limine's memory back to the page allocator
- *     - pool, ACPI, APIC/IOAPIC, clock tick, RTC, PCI
- *     - self-tests when requested, then idle
+ *     - pool, object manager, processes and the scheduler (this code
+ *       becomes the "Init" thread)
+ *     - ACPI, APIC/IOAPIC, clock tick, RTC, PCI
+ *     - self-tests when requested, then start the debug shell and exit
  *
  * Kernel command line options (set in limine.conf):
  *   xenon.debugexit        exit QEMU through the isa-debug-exit device
  *                          instead of halting (used by tools/test.sh)
  *   xenon.selftest         run the kernel self-tests after boot
+ *   xenon.interactive      with xenon.debugexit: start the debug shell
+ *                          instead of exiting (tests drive it over COM1)
  *   xenon.crash=<kind>     crash on purpose to test the stop screen:
  *                          pagefault, divide, opcode, gpf, manual, assert,
  *                          stackoverflow, doublefree
@@ -30,6 +34,8 @@
 #include "rtl.h"
 #include "console.h"
 #include "loader.h"
+#include "ob.h"
+#include "ps.h"
 #include "init.h"
 #include "../arch/x86_64/arch.h"
 #include <xenon/version.h>
@@ -37,6 +43,8 @@
 #define KERNEL_STACK_SIZE (64 * 1024)
 
 void KiRunSelfTests(void);
+void KdStartShell(void);
+static void *g_boot_stack;
 NORETURN void KiSystemStartup(void);
 
 /* ---- Limine requests ---------------------------------------------------- */
@@ -251,6 +259,11 @@ NORETURN static void KiSystemStartupPhase1(void)
     ExInitializePool();
     print_memory();
 
+    ObInitSystem();
+    PsInitSystem(g_boot_stack, KERNEL_STACK_SIZE);
+    DbgPrint("Ke: scheduler running: %u priorities, %u ms time slice, %u Hz clock", MAXIMUM_PRIORITY,
+             THREAD_QUANTUM_MS, KE_CLOCK_HZ);
+
     HalInitAcpi();
     print_cpu();
     HalInitApic();
@@ -264,12 +277,14 @@ NORETURN static void KiSystemStartupPhase1(void)
     if (RtlGetCmdlineOption(KiGetCommandLine(), "xenon.selftest", NULL, 0))
         KiRunSelfTests();
 
-    ConPrint("\nPhase 1.1 complete: memory, ACPI, interrupts, clocks and PCI are up.\n");
-    ConPrint("The shell arrives in Phase 1.5. System idle.\n");
-    if (g_test_mode)
+    ConPrint("\nPhase 1.2 complete: threads, scheduler, DPCs, waits, objects and handles are up.\n");
+    ConPrint("The shell (C:/#) arrives in Phase 1.5.\n");
+    if (g_test_mode && !RtlGetCmdlineOption(KiGetCommandLine(), "xenon.interactive", NULL, 0))
         HalDebugExit(XENON_EXIT_HALTED);
-    for (;;)
-        cpu_hlt();          /* interrupts stay on: the clock keeps ticking */
+
+    /* Hand over to the debug shell; the Init thread's work is done. */
+    KdStartShell();
+    PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
 /* ---- Phase 0: entry point ----------------------------------------------- */
@@ -300,6 +315,7 @@ NORETURN void KiSystemStartup(void)
 
     MmInitSystem();
     void *stack = MmCreateKernelStack(KERNEL_STACK_SIZE);
+    g_boot_stack = stack;
     if (!stack)
         KeBugCheckEx(PHASE0_INITIALIZATION_FAILED, 1, 0, 0, 0);
     DbgPrint("Mm: kernel page tables active, NX %s, framebuffer write-combining",

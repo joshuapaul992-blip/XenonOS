@@ -3,12 +3,35 @@
 A from-scratch x86-64 operating system with a Windows NT-style kernel, native
 FAT12/16/32 drive letters (A:–Z:), and a smart POSIX-style shell.
 
-**Current version:** `XenonOS 0.0.1`, Milestone 1, **Phase 1.1 (memory and platform) complete**.
+**Current version:** `XenonOS 0.0.1`, Milestone 1, **Phase 1.2 (kernel core) complete**.
 See [PLAN.md](PLAN.md) for the full Milestone 1 plan.
 
-![Boot screen](docs/screenshots/phase1.1-boot.png)
+![Kernel debug shell](docs/screenshots/phase1.2-kd.png)
 
 ## What works so far
+
+### Phase 1.2: kernel core
+
+- **IRQL** as on Windows NT (PASSIVE, APC, DISPATCH, device levels, CLOCK, HIGH), kept in the CPU's CR8
+  register. Interrupt handlers run at their own level and can be interrupted by higher ones.
+- **DPCs** (deferred procedure calls): interrupt handlers queue work that runs at DISPATCH_LEVEL once the
+  interrupt is over.
+- **Threads and a preemptive scheduler:** 32 priority levels, 20 ms time slices with round-robin within a
+  level, immediate preemption when a higher-priority thread becomes ready, and an idle thread that halts the
+  CPU. Exited threads are cleaned up, and their kernel stack slots are reused.
+- **Dispatcher objects and waits:** events (notification and synchronization), mutexes (recursive, and
+  "abandoned" when the owner exits), semaphores, timers (one-shot and periodic, with DPCs), and thread
+  objects. Waits can be for any or all of up to 64 objects, with timeouts.
+- **Object Manager:** reference-counted objects with types, a namespace (`\`, `\ObjectTypes`, `\Device`,
+  `\Driver`, `\GLOBAL??`, `\DosDevices` → `\GLOBAL??`, `\BaseNamedObjects`, ...), symbolic links,
+  case-insensitive lookup, and per-process handle tables.
+- **Processes:** Idle (PID 0) and System (PID 4), which owns all kernel threads. User processes come in Phase 1.5.
+- **Kernel log buffer** (128 KiB) holding every log line, for `dmesg`.
+- **Kernel debug shell** (`kd>`) on the screen with the PS/2 keyboard, or on COM1. Commands: `objdir`,
+  `threads`, `ps`, `mem`, `dmesg`, `uptime`, `date`, `irq`, `pci`, `threadtest`, `sleep`, `clear`, `crash`,
+  `reboot`. It is a developer tool; the real `C:/#` shell comes in Phase 1.5.
+
+### Phase 1.1: memory and platform
 
 ### Phase 1.1: memory and platform
 
@@ -44,7 +67,7 @@ See [PLAN.md](PLAN.md) for the full Milestone 1 plan.
   `0x1E KMODE_EXCEPTION_NOT_HANDLED` with `0xC0000005`, and so on).
 - The build number goes up by one on every `make image`.
 
-After booting, the system idles with interrupts on. The shell (`C:/#` prompt) arrives in Phase 1.5.
+After booting, the kernel debug shell (`kd>`) starts. The user shell (`C:/#` prompt) arrives in Phase 1.5.
 
 ## Building
 
@@ -87,6 +110,7 @@ These are set on the `cmdline:` line in `C:/boot/limine/limine.conf`:
 |---|---|
 | `xenon.debugexit` | Exit QEMU through the `isa-debug-exit` device instead of halting (used by the tests) |
 | `xenon.selftest` | Run the kernel self-tests after boot |
+| `xenon.interactive` | Together with `xenon.debugexit`: start the debug shell instead of exiting (used by `tools/qemu-session.py`) |
 | `xenon.crash=KIND` | Crash on purpose to test the stop screen. `KIND` is one of `pagefault`, `divide`, `opcode`, `gpf`, `manual`, `assert`, `stackoverflow`, `doublefree`, `writecode` |
 
 To turn an address from a stop screen into a function name and source line:
@@ -97,24 +121,42 @@ tools/symbolize.sh 0xffffffff80003361
 
 ## Tests
 
-`make test` (22 checks) checks the build-number counter and checks the disk image with `fsck.fat`. It then boots
-with the self-tests in eight QEMU configurations: BIOS + IDE (legacy PCI ports), BIOS + AHCI (PCIe ECAM),
-UEFI, 4 CPUs, 5 GiB RAM, 48 MiB RAM, no HPET (falls back to the ACPI PM timer), and all four USB controller
-types plus two network cards. Finally it triggers nine kinds of crash to check the stop screen.
+`make test` (25 checks) does the following:
+
+- Checks the build-number counter and checks the disk image with `fsck.fat`.
+- Boots with the kernel self-tests (18 tests) in eight QEMU configurations: BIOS + IDE (legacy PCI ports),
+  BIOS + AHCI (PCIe ECAM), UEFI, 4 CPUs, 5 GiB RAM, 48 MiB RAM, no HPET (falls back to the ACPI PM timer),
+  and all four USB controller types plus two network cards.
+- Drives the debug shell, typing over COM1 and over the emulated PS/2 keyboard (on BIOS and UEFI).
+- Triggers nine kinds of crash to check the stop screen.
+
+The self-tests cover the memory manager and pool, clocks, interrupt routing, the RTC, PCI, IRQL and DPCs,
+events, mutexes, semaphores, timers, wait-any/all, preemption, round-robin time slicing, the object namespace,
+and a 2 × 100-thread stress test that must give back every page and pool allocation.
+
+`tools/qemu-session.py` can drive the debug shell by hand too:
+
+```bash
+tools/qemu-session.py "objdir \\" "threads" "exit"
+```
 
 ## Source layout
 
 ```
 kernel/arch/x86_64   GDT, TSS, IDT, interrupt entry stubs, stack switch
 kernel/hal           ACPI, APIC/IOAPIC, HPET, clocks, CMOS RTC, PCI, serial port, PIC, reboot
-kernel/ke            bugcheck (stop screen), interrupt dispatch, spin locks
+kernel/ke            stop screen, IRQL, DPCs, scheduler, waits, events/mutexes/semaphores/timers
+kernel/ob            object manager: objects, namespace, symbolic links, handles
+kernel/ps            processes and threads
+kernel/ex            kernel log buffer
+kernel/kd            kernel debug shell and its keyboard/serial input
 kernel/mm            physical pages, page tables, kernel pool
 kernel/con           framebuffer console, console multiplexer, kernel log
 kernel/rtl           string and printf routines
 kernel/font          built-in fonts (generated by tools/psf2c.py)
 kernel/init          kernel entry point and boot sequence
 kernel/test          kernel self-tests
-tools/               build, image, QEMU, test and screenshot scripts
+tools/               build, image, QEMU, test, session and screenshot scripts
 third_party/         Terminus font sources and license; Limine (downloaded)
 ```
 

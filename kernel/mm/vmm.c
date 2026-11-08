@@ -295,20 +295,66 @@ void MmUnmapIoSpace(void *p, size_t size)
         MmUnmapPage(va + i * PAGE_SIZE);
 }
 
+/*
+ * Kernel stacks live in fixed 128 KiB slots: the lowest page of each slot is
+ * never mapped (guard page) and the stack is mapped at the top. Freed slots
+ * are reused, so the page tables for the stack area stop growing.
+ */
+#define STACK_SLOT_SIZE   (128 * 1024ull)
+#define MAX_FREE_SLOTS    4096
+static uint64_t g_free_slots[MAX_FREE_SLOTS];
+static unsigned g_free_slot_count;
+
 void *MmCreateKernelStack(size_t size)
 {
     size_t pages = BYTES_TO_PAGES(size);
+    if (pages * PAGE_SIZE > STACK_SLOT_SIZE - PAGE_SIZE)
+        return NULL;
     KIRQL_STATE s = KeAcquireSpinLock(&g_lock);
-    uint64_t base = g_stack_next + PAGE_SIZE;       /* guard page stays unmapped */
-    g_stack_next += (pages + 1) * PAGE_SIZE;
+    uint64_t slot;
+    if (g_free_slot_count) {
+        slot = g_free_slots[--g_free_slot_count];
+    } else {
+        slot = g_stack_next;
+        g_stack_next += STACK_SLOT_SIZE;
+    }
+    uint64_t top = slot + STACK_SLOT_SIZE;
+    uint64_t base = top - pages * PAGE_SIZE;
     for (size_t i = 0; i < pages; i++) {
         uint64_t pa = MmAllocatePhysicalPages(1, MM_ANY_ADDRESS, 0);
         if (!pa) {
+            for (size_t j = 0; j < i; j++) {
+                uint64_t *pte = walk(base + j * PAGE_SIZE, false, false);
+                if (pte && (*pte & PTE_PRESENT)) {
+                    MmFreePhysicalPages(*pte & PTE_ADDR_MASK, 1);
+                    *pte = 0;
+                    invlpg(base + j * PAGE_SIZE);
+                }
+            }
+            if (g_free_slot_count < MAX_FREE_SLOTS)
+                g_free_slots[g_free_slot_count++] = slot;
             KeReleaseSpinLock(&g_lock, s);
             return NULL;
         }
         map_page_locked(base + i * PAGE_SIZE, pa, MM_MAP_WRITE, MmCached);
     }
     KeReleaseSpinLock(&g_lock, s);
-    return (void *)(base + pages * PAGE_SIZE);
+    return (void *)top;
+}
+
+void MmFreeKernelStack(void *top, size_t size)
+{
+    size_t pages = BYTES_TO_PAGES(size);
+    uint64_t base = (uint64_t)top - pages * PAGE_SIZE;
+    for (size_t i = 0; i < pages; i++) {
+        uint64_t va = base + i * PAGE_SIZE;
+        uint64_t pa = MmGetPhysicalAddress((void *)va);
+        MmUnmapPage(va);
+        if (pa)
+            MmFreePhysicalPages(pa & ~(PAGE_SIZE - 1), 1);
+    }
+    KIRQL_STATE s = KeAcquireSpinLock(&g_lock);
+    if (g_free_slot_count < MAX_FREE_SLOTS)
+        g_free_slots[g_free_slot_count++] = (uint64_t)top - STACK_SLOT_SIZE;
+    KeReleaseSpinLock(&g_lock, s);
 }

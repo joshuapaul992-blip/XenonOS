@@ -137,3 +137,46 @@ bool RtlGetCmdlineOption(const char *cmdline, const char *key, char *out, size_t
     }
     return false;
 }
+
+int tolower(int c) { return (c >= 'A' && c <= 'Z') ? c + 32 : c; }
+int toupper(int c) { return (c >= 'a' && c <= 'z') ? c - 32 : c; }
+
+int strcasecmp(const char *a, const char *b)
+{
+    while (*a && tolower((unsigned char)*a) == tolower((unsigned char)*b)) {
+        a++;
+        b++;
+    }
+    return tolower((unsigned char)*a) - tolower((unsigned char)*b);
+}
+
+int strncasecmp(const char *a, const char *b, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        int x = tolower((unsigned char)a[i]), y = tolower((unsigned char)b[i]);
+        if (x != y || !x)
+            return x - y;
+    }
+    return 0;
+}
+
+char *strrchr(const char *s, int c)
+{
+    const char *last = NULL;
+    for (;; s++) {
+        if (*s == (char)c)
+            last = s;
+        if (!*s)
+            return (char *)last;
+    }
+}
+
+int atoi(const char *s)
+{
+    int sign = 1, v = 0;
+    while (*s == ' ') s++;
+    if (*s == '-') { sign = -1; s++; }
+    while (*s >= '0' && *s <= '9')
+        v = v * 10 + (*s++ - '0');
+    return v * sign;
+}

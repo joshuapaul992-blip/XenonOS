@@ -62,13 +62,6 @@ static void wait_pit(unsigned ms)
     }
 }
 
-static void clock_interrupt(KTRAP_FRAME *frame, void *context)
-{
-    UNUSED(frame);
-    UNUSED(context);
-    __atomic_add_fetch(&KeTickCount, 1, __ATOMIC_RELAXED);
-}
-
 void HalInitClock(void)
 {
     void (*wait)(unsigned) = wait_pit;
@@ -108,7 +101,7 @@ void HalInitClock(void)
              (unsigned long long)(HalApicTimerFrequency() / 1000000),
              (unsigned long long)((HalApicTimerFrequency() / 1000) % 1000));
 
-    KeConnectInterrupt(VECTOR_CLOCK, clock_interrupt, NULL);
+    KeConnectInterrupt(VECTOR_CLOCK, KiClockInterrupt, NULL);
     HalApicTimerStartPeriodic(VECTOR_CLOCK, KE_CLOCK_HZ);
 }
 

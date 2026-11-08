@@ -66,3 +66,9 @@ void KiInitGdt(void)
     KiLoadGdt(&gdtr, SEL_KERNEL_CODE, SEL_KERNEL_DATA);
     __asm__ volatile("ltr %w0" :: "r"((uint16_t)SEL_TSS));
 }
+
+/* Stack used when an interrupt arrives in user mode (set on every thread switch). */
+void KiSetKernelStack(uint64_t rsp0)
+{
+    g_tss.Rsp[0] = rsp0;
+}

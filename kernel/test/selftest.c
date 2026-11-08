@@ -13,7 +13,8 @@
 #include "loader.h"
 
 static unsigned g_pass, g_fail;
-static char g_why[160];
+char KiSelfTestWhy[160];
+#define g_why KiSelfTestWhy
 
 #define CHECK(cond, ...) do { if (!(cond)) { snprintf(g_why, sizeof(g_why), __VA_ARGS__); return false; } } while (0)
 
@@ -119,6 +120,8 @@ static bool test_vmm(void)
     CHECK(top, "MmCreateKernelStack failed");
     CHECK(MmGetPhysicalAddress(top - 16384) != 0, "stack bottom not mapped");
     CHECK(MmGetPhysicalAddress(top - 16384 - 1) == 0, "guard page is mapped");
+    MmFreeKernelStack(top, 16384);
+    CHECK(MmGetPhysicalAddress(top - 16384) == 0, "stack still mapped after MmFreeKernelStack");
 
     /* Every RAM region (including any above 4 GiB) must be in the direct map. */
     for (uint32_t i = 0; i < KeLoaderBlock.MemoryMapCount; i++) {
@@ -313,6 +316,17 @@ static bool test_pci(void)
     return true;
 }
 
+bool KiTestIrqlDpc(void);
+bool KiTestEvents(void);
+bool KiTestMutex(void);
+bool KiTestSemaphore(void);
+bool KiTestTimers(void);
+bool KiTestWaits(void);
+bool KiTestPreemption(void);
+bool KiTestRoundRobin(void);
+bool KiTestThreads100(void);
+bool KiTestObjects(void);
+
 void KiRunSelfTests(void)
 {
     DbgPrint("SELFTEST: starting");
@@ -324,5 +338,15 @@ void KiRunSelfTests(void)
     run("dates", test_dates);
     run("rtc", test_rtc);
     run("pci", test_pci);
+    run("irql-dpc", KiTestIrqlDpc);
+    run("events", KiTestEvents);
+    run("mutex", KiTestMutex);
+    run("semaphore", KiTestSemaphore);
+    run("timers", KiTestTimers);
+    run("waits", KiTestWaits);
+    run("preemption", KiTestPreemption);
+    run("round-robin", KiTestRoundRobin);
+    run("threads100", KiTestThreads100);
+    run("objects", KiTestObjects);
     DbgPrint("SELFTEST: %u passed, %u failed", g_pass, g_fail);
 }

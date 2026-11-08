@@ -28,15 +28,22 @@ mcopy -o -i "$WORK/disk.img@@1M" "$WORK/limine.conf" ::/boot/limine/limine.conf
 qemu-system-x86_64 -m 256M $FW ${QEMU_EXTRA:-} -drive file="$WORK/disk.img",format=raw,if=ide \
     -display none -serial null -monitor unix:"$WORK/mon.sock",server,nowait &
 QPID=$!
-python3 - "$WORK/mon.sock" "$WORK/screen.ppm" "$WAIT" <<'PY'
-import socket, sys, time
-sock, ppm, wait = sys.argv[1], sys.argv[2], float(sys.argv[3])
+python3 - "$WORK/mon.sock" "$WORK/screen.ppm" "$WAIT" "$ROOT/tools/qemu-session.py" "${TYPE:-}" <<'PY'
+import importlib.util, socket, sys, time
+sock, ppm, wait, session, typed = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4], sys.argv[5]
+spec = importlib.util.spec_from_file_location("session", session)
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 for _ in range(50):
     try:
         s = socket.socket(socket.AF_UNIX); s.connect(sock); break
     except OSError:
         time.sleep(0.1)
 time.sleep(wait)
+# TYPE="cmd1;cmd2": type each command on the PS/2 keyboard, then wait a bit.
+for line in [c for c in typed.split(";") if c]:
+    for ch in line + "\n":
+        s.send(f"sendkey {mod.qemu_key(ch)}\n".encode()); time.sleep(0.04)
+    time.sleep(1.0)
 s.send(f"screendump {ppm}\n".encode()); time.sleep(1.0)
 s.send(b"quit\n"); time.sleep(0.3)
 PY
