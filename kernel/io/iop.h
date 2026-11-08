@@ -17,6 +17,8 @@ typedef struct DISK_EXTENSION {
     uint64_t SectorCount;
     bool MediaPresent;
     bool WriteProtected;
+    uint32_t MediaChangeCount;      /* incremented whenever the medium changes */
+    uint32_t MbrDiskId;             /* disk signature from the MBR (set by the partition manager) */
     struct CACHE *Cache;
     KMUTEX PortLock;                /* one request at a time into the port driver */
 } DISK_EXTENSION;

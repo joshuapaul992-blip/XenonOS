@@ -27,10 +27,22 @@ void KdCmdWritetest(int, char **);
 void KdCmdCache(int, char **);
 void KdCmdSync(int, char **);
 void IoShutdownSystem(void);
+void KdCmdDrives(int, char **);
+void KdCmdDir(int, char **);
+void KdCmdType(int, char **);
+void KdCmdFcrc(int, char **);
+void KdCmdMkdir(int, char **);
+void KdCmdDel(int, char **);
+void KdCmdRen(int, char **);
+void KdCmdCopy(int, char **);
+void KdCmdWrite(int, char **);
+void KdCmdAttrib(int, char **);
+void KdCmdMount(int, char **);
+void KdCmdUmount(int, char **);
 int KdGetChar(int64_t timeout_ns);
 
 #define MAX_LINE 256
-#define MAX_ARGS 8
+#define MAX_ARGS 12
 
 /* ---- Line input ---------------------------------------------------------- */
 
@@ -70,7 +82,7 @@ static int read_line(char *buf, int size)
             }
             continue;
         }
-        if (c >= 0x20 && c < 0x7F && n < size - 1) {
+        if (c >= 0x20 && c != 0x7F && n < size - 1) {    /* includes UTF-8 bytes */
             buf[n++] = (char)c;
             char ch = (char)c;
             ConWrite(&ch, 1);
@@ -78,6 +90,7 @@ static int read_line(char *buf, int size)
     }
 }
 
+/* Split on spaces; "double quotes" keep spaces inside one argument. */
 static int split(char *line, char *argv[])
 {
     int argc = 0;
@@ -87,11 +100,20 @@ static int split(char *line, char *argv[])
             p++;
         if (!*p)
             break;
-        argv[argc++] = p;
-        while (*p && *p != ' ')
-            p++;
+        char *out = p;
+        argv[argc++] = out;
+        bool quoted = false;
+        while (*p && (quoted || *p != ' ')) {
+            if (*p == '"') {
+                quoted = !quoted;
+                p++;
+                continue;
+            }
+            *out++ = *p++;
+        }
         if (*p)
-            *p++ = 0;
+            p++;
+        *out = 0;
     }
     return argc;
 }
@@ -375,6 +397,18 @@ static const struct {
     { "writetest",  KdCmdWritetest, "writetest <device> <lba> <count> <seed>" },
     { "cache",      KdCmdCache,     "block cache statistics" },
     { "sync",       KdCmdSync,      "write all cached disk data" },
+    { "drives",     KdCmdDrives,    "list drive letters" },
+    { "dir",        KdCmdDir,       "dir <dir> [pattern]  list a directory" },
+    { "type",       KdCmdType,      "type <file>  show a file" },
+    { "fcrc",       KdCmdFcrc,      "fcrc <file>  CRC32 of a file" },
+    { "mkdir",      KdCmdMkdir,     "mkdir <dir>" },
+    { "del",        KdCmdDel,       "del <file-or-empty-dir>" },
+    { "ren",        KdCmdRen,       "ren <path> <new-path>  rename or move" },
+    { "copy",       KdCmdCopy,      "copy <from> <to>" },
+    { "write",      KdCmdWrite,     "write <file> <bytes> <seed> [append]  write test data" },
+    { "attrib",     KdCmdAttrib,    "attrib <path> [+r -r +h -h +s -s +a -a]" },
+    { "mount",      KdCmdMount,     "mount [X: <device>]  assign a drive letter" },
+    { "umount",     KdCmdUmount,    "umount X:  dismount and remove a drive letter" },
     { "threadtest", cmd_threadtest, "threadtest [n]  run n threads that share a mutex" },
     { "sleep",      cmd_sleep,      "sleep [ms]" },
     { "clear",      cmd_clear,      "clear the screen" },

@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
-# XenonOS automated tests (Phases 1.0 to 1.3).
+# XenonOS automated tests (Phases 1.0 to 1.4).
 #
 # Uses the image from the last "make image" (it does not build a new image,
 # so running the tests does not change the build number). Each boot runs on a
@@ -69,7 +69,7 @@ expect_boot() {
     [ "$STATUS" = skip ] && return
     log=$OUT/$name.log
     missing=""
-    for want in "$BANNER" "on $fwtext" "Phase 1.3 complete" "$@"; do
+    for want in "$BANNER" "on $fwtext" "Phase 1.4 complete" "$@"; do
         grep -qF -- "$want" "$log" || missing="$missing '$want'"
     done
     selftest=$(grep -o "SELFTEST: [0-9]* passed, [0-9]* failed" "$log" | tail -1)
@@ -208,7 +208,19 @@ grep -E "PASS|FAIL|^       \|" "$OUT/storage.out" | grep -v "^storage:"
 PASS=$((PASS + $(grep -c "PASS" "$OUT/storage.out")))
 FAIL=$((FAIL + $(grep -c "FAIL" "$OUT/storage.out")))
 
-# 6. Stop screen
+# 6. FAT: the core on the host (stress, fsck.fat, mtools), then in QEMU
+echo "FAT file system (host):"
+"$ROOT/tools/test-fat-host.py" > "$OUT/fat-host.out" 2>&1
+grep -E "PASS|FAIL|^       \|" "$OUT/fat-host.out" | cut -c1-170
+PASS=$((PASS + $(grep -c "PASS" "$OUT/fat-host.out")))
+FAIL=$((FAIL + $(grep -c "FAIL" "$OUT/fat-host.out")))
+echo "FAT file system and drive letters (QEMU):"
+"$ROOT/tools/test-fat.py" > "$OUT/fat.out" 2>&1
+grep -E "PASS|FAIL|^       \|" "$OUT/fat.out"
+PASS=$((PASS + $(grep -c "PASS" "$OUT/fat.out")))
+FAIL=$((FAIL + $(grep -c "FAIL" "$OUT/fat.out")))
+
+# 7. Stop screen
 echo "stop screen:"
 expect_crash pagefault 0x00000050 PAGE_FAULT_IN_NONPAGED_AREA
 expect_crash divide    0x0000001E "(0x00000000C0000094"

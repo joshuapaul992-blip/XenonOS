@@ -36,6 +36,8 @@ typedef struct PART_EXTENSION {
 } PART_EXTENSION;
 
 static DRIVER_OBJECT *g_driver;
+static DEVICE_OBJECT *g_new_volumes[MAX_PARTS_PER_DISK];   /* created by the current scan */
+static unsigned g_new_count;
 static DEVICE_OBJECT *g_volumes[MAX_VOLUMES];
 static unsigned g_next_volume = 1;
 static KMUTEX g_lock;
@@ -211,6 +213,7 @@ static int parse_mbr(DEVICE_OBJECT *disk, const uint8_t *mbr, FOUND *out, int ma
             out[n].Info.PartitionStyle = 0;
             out[n].Info.MbrType = type;
             out[n].Info.BootIndicator = p[0] == 0x80;
+            out[n].Info.TableIndex = (uint32_t)i + 1;
             n++;
         }
     }
@@ -223,6 +226,7 @@ static int parse_mbr(DEVICE_OBJECT *disk, const uint8_t *mbr, FOUND *out, int ma
             continue;
         uint32_t ext_start = (uint32_t)(p[8] | p[9] << 8 | p[10] << 16 | (uint32_t)p[11] << 24);
         uint64_t ebr = ext_start;
+        int logical_index = 0;
         uint8_t *buf = ExAllocatePoolWithTag(NonPagedPool, x->BytesPerSector, 'PmBu');
         if (!buf)
             break;
@@ -238,6 +242,8 @@ static int parse_mbr(DEVICE_OBJECT *disk, const uint8_t *mbr, FOUND *out, int ma
                 out[n].Sectors = lc;
                 out[n].Info.PartitionStyle = 0;
                 out[n].Info.MbrType = l[4];
+                out[n].Info.Logical = true;
+                out[n].Info.TableIndex = 5 + (uint32_t)logical_index++;
                 n++;
             }
             uint32_t ns = (uint32_t)(next[8] | next[9] << 8 | next[10] << 16 | (uint32_t)next[11] << 24);
@@ -299,6 +305,8 @@ static int parse_gpt_at(DEVICE_OBJECT *disk, uint64_t header_lba, FOUND *out, in
         out[n].Sectors = last - first + 1;
         out[n].Info.PartitionStyle = 1;
         memcpy(out[n].Info.GptType, p, 16);
+        memcpy(out[n].Info.GptPartUuid, p + 16, 16);
+        out[n].Info.TableIndex = i + 1;
         for (int c = 0; c < 36; c++) {                /* UTF-16LE name -> ASCII */
             uint16_t ch = (uint16_t)(p[56 + c * 2] | (p[57 + c * 2] << 8));
             if (!ch) {
@@ -352,13 +360,16 @@ static void create_volume(DEVICE_OBJECT *disk, const FOUND *f, uint32_t number)
     x->Info.StartingOffset = (int64_t)x->Start;
     x->Info.PartitionLength = (int64_t)x->Length;
     x->Info.PartitionNumber = number;
+    x->Info.MbrDiskId = dx->MbrDiskId;
     dev->StackSize = (int8_t)(disk->StackSize + 1);
+    IoMarkVolumeDevice(dev);
     dev->SectorSize = dx->BytesPerSector;
     snprintf(x->Link, sizeof(x->Link), "\\Device\\Harddisk%u\\Partition%u", dx->Number, number);
     IoCreateSymbolicLink(x->Link, name);
     snprintf(x->GlobalLink, sizeof(x->GlobalLink), "\\GLOBAL??\\HarddiskVolume%u", vol);
     IoCreateSymbolicLink(x->GlobalLink, name);
     g_volumes[slot] = dev;
+    g_new_volumes[g_new_count < MAX_PARTS_PER_DISK ? g_new_count++ : g_new_count - 1] = dev;
 
     const char *type = f->Info.PartitionStyle == 0 ? mbr_type_name(f->Info.MbrType)
                      : f->Info.PartitionStyle == 1 ? gpt_type_name(f->Info.GptType) : "whole disk";
@@ -393,6 +404,8 @@ void PartMgrScanDisk(DEVICE_OBJECT *disk)
         goto out;
     }
     KeWaitForSingleObject(&g_lock, KE_INFINITE);
+    g_new_count = 0;
+    x->MbrDiskId = (uint32_t)(mbr[440] | mbr[441] << 8 | mbr[442] << 16 | (uint32_t)mbr[443] << 24);
     bool gpt;
     int n = parse_mbr(disk, mbr, found, MAX_PARTS_PER_DISK, &gpt);
     if (gpt) {
@@ -419,7 +432,13 @@ void PartMgrScanDisk(DEVICE_OBJECT *disk)
         create_volume(disk, &found[i], (uint32_t)i + 1);
     if (n == 0)
         DbgPrint("PartMgr: Harddisk%u: %s partition table with no partitions", x->Number, x->Style);
+    DEVICE_OBJECT *arrived[MAX_PARTS_PER_DISK];
+    unsigned arrived_count = g_new_count;
+    memcpy(arrived, g_new_volumes, sizeof(DEVICE_OBJECT *) * arrived_count);
     KeReleaseMutex(&g_lock);
+    /* Tell the mount manager (it ignores this until its boot-time pass is done). */
+    for (unsigned i = 0; i < arrived_count; i++)
+        MountMgrVolumeArrival(arrived[i]);
 out:
     if (mbr)
         ExFreePoolWithTag(mbr, 'PmBu');
@@ -437,6 +456,8 @@ void PartMgrRemoveDisk(DEVICE_OBJECT *disk)
         if (!v || ((PART_EXTENSION *)v->DeviceExtension)->Disk != disk)
             continue;
         PART_EXTENSION *x = v->DeviceExtension;
+        MountMgrVolumeRemoval(v);
+        IoDismountVolume(v);
         IoDeleteSymbolicLink(x->Link);
         IoDeleteSymbolicLink(x->GlobalLink);
         g_volumes[i] = NULL;

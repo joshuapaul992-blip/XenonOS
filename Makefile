@@ -6,6 +6,8 @@
 #   make kernel     build the kernel only (keeps the current build number)
 #   make run        boot the image in QEMU (BIOS)       make run-uefi   (UEFI)
 #   make test       run the automated tests on the current image
+#   make host       build host tools (build/host/xfat: the FAT core as a Linux program)
+#   make host-test  run the FAT core host tests (stress, fsck.fat, mtools)
 #   make clean      remove build output
 #
 # Every "make image" is a new build: XenonOS 0.0.1 (build N) -> (build N+1).
@@ -37,7 +39,7 @@ KERNEL_C   := $(shell find kernel drivers -name '*.c' | sort)
 KERNEL_ASM := $(shell find kernel -name '*.asm' | sort)
 KERNEL_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(KERNEL_C)) $(patsubst %.asm,$(BUILD)/%.asm.o,$(KERNEL_ASM))
 
-.PHONY: all image kernel run run-uefi run-q35 test clean fonts limine FORCE
+.PHONY: all image kernel run run-uefi run-q35 test clean fonts limine host host-test FORCE
 
 all: image
 
@@ -85,8 +87,22 @@ run-uefi: $(IMAGE)
 run-q35: $(IMAGE)
 	tools/run-qemu.sh --q35
 
-test:
+test: host
 	@tools/test.sh
+
+# Host builds of portable kernel code, with AddressSanitizer and UBSan.
+HOST_CFLAGS := -std=gnu11 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter \
+    -fsanitize=address,undefined -fno-sanitize-recover=undefined
+
+host: $(BUILD)/host/xfat
+
+$(BUILD)/host/xfat: tests/host/fat/xfat.c drivers/fs/fatcore.c drivers/fs/fatcore.h
+	@mkdir -p $(dir $@)
+	@echo "  HOSTCC  $@"
+	@$(CC) $(HOST_CFLAGS) -o $@ tests/host/fat/xfat.c drivers/fs/fatcore.c -lz
+
+host-test: host
+	@tools/test-fat-host.py
 
 clean:
 	rm -rf ./$(BUILD)

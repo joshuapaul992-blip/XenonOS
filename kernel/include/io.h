@@ -74,6 +74,10 @@ typedef struct {
     bool     BootIndicator;
     uint8_t  GptType[16];
     char     Name[37];              /* GPT partition name (ASCII) */
+    bool     Logical;               /* MBR logical partition (inside an extended one) */
+    uint32_t TableIndex;            /* 1-based: MBR 1-4 primary, 5+ logical; GPT entry + 1 */
+    uint32_t MbrDiskId;             /* disk signature (MBR) */
+    uint8_t  GptPartUuid[16];
 } PARTITION_INFORMATION_EX;
 
 typedef struct {
@@ -87,6 +91,7 @@ typedef struct {
     bool     WriteProtected;
     uint32_t DiskNumber;            /* N in HarddiskN / FloppyN */
     bool     Floppy;
+    uint32_t MediaChangeCount;      /* goes up every time the medium changes */
 } XENON_DISK_INFO;
 
 /* ---- Objects ------------------------------------------------------------ */
@@ -98,6 +103,8 @@ typedef struct IO_STATUS_BLOCK {
 
 struct DEVICE_OBJECT;
 struct IRP;
+struct FILE_OBJECT;
+struct VPB;
 typedef NTSTATUS (*PDRIVER_DISPATCH)(struct DEVICE_OBJECT *dev, struct IRP *irp);
 typedef NTSTATUS (*PIO_COMPLETION_ROUTINE)(struct DEVICE_OBJECT *dev, struct IRP *irp, void *context);
 
@@ -120,7 +127,7 @@ typedef struct DEVICE_OBJECT {
     uint32_t SectorSize;
     int8_t   StackSize;                      /* IRP stack locations this device needs */
     void    *DeviceExtension;
-    void    *Vpb;                            /* mounted volume (Phase 1.4) */
+    struct VPB *Vpb;                         /* volumes: the mounted file system */
 } DEVICE_OBJECT;
 
 typedef struct IO_STACK_LOCATION {
@@ -132,9 +139,17 @@ typedef struct IO_STACK_LOCATION {
         struct { uint32_t Length; uint64_t ByteOffset; } Read;
         struct { uint32_t Length; uint64_t ByteOffset; } Write;
         struct { uint32_t OutputBufferLength; uint32_t InputBufferLength; uint32_t IoControlCode; } DeviceIoControl;
+        struct { uint32_t Options; uint32_t FileAttributes; uint32_t DesiredAccess; } Create;
+        struct { uint32_t Length; uint32_t FileInformationClass; } QueryFile;
+        struct { uint32_t Length; uint32_t FileInformationClass; struct FILE_OBJECT *TargetFileObject;
+                 const char *TargetName; bool ReplaceIfExists; } SetFile;
+        struct { uint32_t Length; uint32_t FileInformationClass; const char *FileName; uint32_t Flags; } QueryDirectory;
+        struct { uint32_t Length; uint32_t FsInformationClass; } QueryVolume;
+        struct { struct VPB *Vpb; struct DEVICE_OBJECT *DeviceObject; uint32_t FsControlCode; } FileSystemControl;
         struct { void *Arg1, *Arg2, *Arg3, *Arg4; } Others;
     } Parameters;
     DEVICE_OBJECT *DeviceObject;
+    struct FILE_OBJECT *FileObject;
     PIO_COMPLETION_ROUTINE CompletionRoutine;
     void *Context;
 } IO_STACK_LOCATION;
@@ -252,3 +267,171 @@ DEVICE_OBJECT *PartMgrGetVolume(unsigned index);
 const char *PartMgrDiskStyle(DEVICE_OBJECT *disk);
 
 uint32_t RtlCrc32(uint32_t crc, const void *data, size_t len);
+
+/* ---- Files, volumes and file systems ---------------------------------------- */
+
+#define IRP_MN_MOUNT_VOLUME        0x01
+#define IRP_MN_USER_FS_REQUEST     0x00
+#define IRP_MN_QUERY_DIRECTORY     0x01
+#define FSCTL_DISMOUNT_VOLUME      0x00090020
+#define FSCTL_XENON_FORCE_DISMOUNT 0x80000004   /* write everything and dismount even with open files */
+#define FSCTL_XENON_INVALIDATE     0x80000008   /* medium changed or gone: dismount without writing */
+
+/* NtCreateFile dispositions and options (NT values) */
+#define FILE_SUPERSEDE             0
+#define FILE_OPEN                  1
+#define FILE_CREATE                2
+#define FILE_OPEN_IF               3
+#define FILE_OVERWRITE             4
+#define FILE_OVERWRITE_IF          5
+#define FILE_DIRECTORY_FILE        0x00000001
+#define FILE_NON_DIRECTORY_FILE    0x00000040
+#define FILE_DELETE_ON_CLOSE       0x00001000
+/* results (IO_STATUS_BLOCK.Information) */
+#define FILE_SUPERSEDED            0
+#define FILE_OPENED                1
+#define FILE_CREATED               2
+#define FILE_OVERWRITTEN           3
+
+/* Access rights (subset) */
+#define FILE_READ_DATA             0x0001
+#define FILE_WRITE_DATA            0x0002
+#define FILE_APPEND_DATA           0x0004
+#define DELETE                     0x00010000
+#define GENERIC_READ               0x80000000u
+#define GENERIC_WRITE              0x40000000u
+#define GENERIC_ALL                0x10000000u
+
+/* File attributes (same bits as FAT) */
+#define FILE_ATTRIBUTE_READONLY    0x01
+#define FILE_ATTRIBUTE_HIDDEN      0x02
+#define FILE_ATTRIBUTE_SYSTEM      0x04
+#define FILE_ATTRIBUTE_DIRECTORY   0x10
+#define FILE_ATTRIBUTE_ARCHIVE     0x20
+#define FILE_ATTRIBUTE_NORMAL      0x80
+
+/* Information classes (NT numbers) */
+#define FileDirectoryInformation    1
+#define FileBasicInformation        4
+#define FileStandardInformation     5
+#define FileNameInformation         9
+#define FileRenameInformation       10
+#define FileDispositionInformation  13
+#define FilePositionInformation     14
+#define FileEndOfFileInformation    20
+#define FileFsVolumeInformation     1
+#define FileFsSizeInformation       3
+#define FileFsAttributeInformation  5
+
+/* Times are NT times: 100 ns units since 1601-01-01 UTC. */
+typedef struct { int64_t CreationTime, LastAccessTime, LastWriteTime, ChangeTime; uint32_t FileAttributes; } FILE_BASIC_INFORMATION;
+typedef struct { int64_t AllocationSize, EndOfFile; uint32_t NumberOfLinks; bool DeletePending, Directory; } FILE_STANDARD_INFORMATION;
+typedef struct { int64_t CurrentByteOffset; } FILE_POSITION_INFORMATION;
+typedef struct { int64_t EndOfFile; } FILE_END_OF_FILE_INFORMATION;
+typedef struct { bool DeleteFile; } FILE_DISPOSITION_INFORMATION;
+typedef struct { uint32_t FileNameLength; char FileName[1]; } FILE_NAME_INFORMATION;       /* UTF-8 */
+
+/* Directory entries (UTF-8 names; NextEntryOffset 0 ends the buffer). */
+typedef struct {
+    uint32_t NextEntryOffset;
+    uint32_t FileIndex;
+    int64_t  CreationTime, LastAccessTime, LastWriteTime, ChangeTime;
+    int64_t  EndOfFile, AllocationSize;
+    uint32_t FileAttributes;
+    char     ShortName[13];
+    uint32_t FileNameLength;
+    char     FileName[1];
+} FILE_DIRECTORY_INFORMATION;
+#define SL_RESTART_SCAN        0x01
+#define SL_RETURN_SINGLE_ENTRY 0x02
+
+typedef struct { int64_t VolumeCreationTime; uint32_t VolumeSerialNumber; uint32_t VolumeLabelLength; char VolumeLabel[32]; } FILE_FS_VOLUME_INFORMATION;
+typedef struct { int64_t TotalAllocationUnits, AvailableAllocationUnits; uint32_t SectorsPerAllocationUnit, BytesPerSector; } FILE_FS_SIZE_INFORMATION;
+typedef struct { uint32_t FileSystemAttributes; uint32_t MaximumComponentNameLength; uint32_t FileSystemNameLength; char FileSystemName[16]; } FILE_FS_ATTRIBUTE_INFORMATION;
+
+/* Volume parameter block: links a volume device to its mounted file system. */
+#define VPB_MOUNTED 0x0001
+typedef struct VPB {
+    uint32_t Flags;
+    DEVICE_OBJECT *DeviceObject;        /* the file system's volume device */
+    DEVICE_OBJECT *RealDevice;          /* the storage volume (partition, floppy) */
+    uint32_t SerialNumber;
+    char VolumeLabel[32];
+    char FileSystem[16];                /* "FAT12", "FAT16", "FAT32" */
+    uint32_t MediaChangeCount;          /* of the real device when mounted */
+    volatile uint32_t ReferenceCount;   /* open files */
+} VPB;
+
+#define FO_VOLUME_OPEN   0x0001         /* the volume itself, not a file in it */
+#define FO_RAW_DEVICE    0x0002         /* a device with no file system (e.g. a whole disk) */
+#define FO_DIRECTORY     0x0004
+
+typedef struct FILE_OBJECT {
+    DEVICE_OBJECT *DeviceObject;        /* the real device (volume, disk) */
+    VPB *Vpb;                           /* mounted file system, NULL for raw devices */
+    DEVICE_OBJECT *FsDevice;            /* the file system volume device it was opened on */
+    void *FsContext;                    /* file system: shared per-file data */
+    void *FsContext2;                   /* file system: per-open data */
+    int64_t CurrentByteOffset;
+    uint32_t Flags;
+    uint32_t DesiredAccess;
+    bool DeletePending;
+    char FileName[512];                 /* path inside the volume, '\'-separated */
+} FILE_OBJECT;
+
+extern OBJECT_TYPE *IoFileObjectType;
+
+NTSTATUS IoRegisterFileSystem(DEVICE_OBJECT *fs_device);
+/* Mount a file system on a volume device if none is mounted yet (or the
+   medium changed). Returns STATUS_UNRECOGNIZED_VOLUME if no file system knows it. */
+NTSTATUS IoMountVolume(DEVICE_OBJECT *volume);
+NTSTATUS IoDismountVolume(DEVICE_OBJECT *volume);
+NTSTATUS IoForceDismountVolume(DEVICE_OBJECT *volume);   /* shutdown, removed media */
+bool IoIsVolumeDevice(DEVICE_OBJECT *device);
+void IoMarkVolumeDevice(DEVICE_OBJECT *device);   /* partitions and floppies */
+NTSTATUS IoQueryMediaChangeCount(DEVICE_OBJECT *device, uint32_t *count);
+
+/* ---- Native file API (kernel callers now, system calls in Phase 1.5) ------- */
+
+/* "C:/dir/file" or "C:\dir\file" -> "\??\C:\dir\file"; "//./X" -> "\??\X";
+   NT paths ("\Device\...") are copied. */
+NTSTATUS RtlDosPathToNtPath(const char *dos, char *nt, size_t size);
+
+NTSTATUS NtCreateFile(HANDLE *handle, uint32_t access, const char *path, IO_STATUS_BLOCK *iosb,
+                      uint32_t attributes, uint32_t disposition, uint32_t options);
+NTSTATUS NtReadFile(HANDLE h, void *buf, uint32_t len, const int64_t *offset, IO_STATUS_BLOCK *iosb);
+NTSTATUS NtWriteFile(HANDLE h, const void *buf, uint32_t len, const int64_t *offset, IO_STATUS_BLOCK *iosb);
+NTSTATUS NtQueryInformationFile(HANDLE h, IO_STATUS_BLOCK *iosb, void *buf, uint32_t len, uint32_t cls);
+NTSTATUS NtSetInformationFile(HANDLE h, IO_STATUS_BLOCK *iosb, void *buf, uint32_t len, uint32_t cls);
+/* cls == FileRenameInformation: buf is the new path (DOS or NT form, NUL-terminated). */
+NTSTATUS NtQueryDirectoryFile(HANDLE h, IO_STATUS_BLOCK *iosb, void *buf, uint32_t len, uint32_t cls,
+                              bool single, const char *pattern, bool restart);
+NTSTATUS NtQueryVolumeInformationFile(HANDLE h, IO_STATUS_BLOCK *iosb, void *buf, uint32_t len, uint32_t cls);
+NTSTATUS NtFlushBuffersFile(HANDLE h, IO_STATUS_BLOCK *iosb);
+NTSTATUS NtDeleteFile(const char *path);
+NTSTATUS NtClose(HANDLE h);
+
+/* Time helpers */
+int64_t KeQuerySystemTime(void);                    /* NT time, now */
+int64_t RtlUnixToNtTime(int64_t unix_seconds);
+int64_t RtlNtTimeToUnix(int64_t nt);
+
+/* ---- Mount manager (drive letters) ------------------------------------------- */
+
+typedef struct {
+    char Letter;                    /* 'A'..'Z' */
+    char Device[64];                /* \Device\HarddiskVolume1, \Device\Floppy0 */
+    char FileSystem[16];            /* "" if no file system (e.g. empty floppy drive) */
+    char Label[32];
+    uint32_t Serial;
+    uint64_t TotalBytes, FreeBytes;
+    bool Removable, Floppy, Boot, MediaPresent;
+} MOUNT_INFO;
+
+void MountMgrInitialize(void);                      /* assign letters to what exists at boot */
+void MountMgrVolumeArrival(DEVICE_OBJECT *volume);  /* later arrivals (USB, ...) */
+void MountMgrVolumeRemoval(DEVICE_OBJECT *volume);
+NTSTATUS MountMgrAssign(char letter, const char *device);
+NTSTATUS MountMgrRemove(char letter);
+bool MountMgrQuery(char letter, MOUNT_INFO *info);  /* false if the letter is unused */
+void MountMgrShutdown(void);                        /* dismount everything cleanly */

@@ -5,12 +5,39 @@ An OS that's a mix of Linux and Windows (warning: fully vibe-coded, use at your 
 A from-scratch x86-64 operating system with a Windows NT-style kernel, native
 FAT12/16/32 drive letters (A:–Z:), and a smart POSIX-style shell.
 
-**Current version:** `XenonOS 0.0.1`, Milestone 1, **Phase 1.3 (storage) complete**.
+**Current version:** `XenonOS 0.0.1`, Milestone 1, **Phase 1.4 (FAT file system and drive letters) complete**.
 See [PLAN.md](PLAN.md) for the full Milestone 1 plan.
 
-![Storage in the kernel debug shell](docs/screenshots/phase1.3-storage.png)
+![Drive letters and FAT volumes](docs/screenshots/phase1.4-fat.png)
 
 ## What works so far
+
+### Phase 1.4: FAT file system and drive letters
+
+- **FAT12, FAT16 and FAT32, read and write:**
+  - long file names (Unicode, stored as UTF-16), with Windows-style 8.3 aliases (`HELLOW~1.TXT`) and the NT
+    lowercase flags for plain 8.3 names;
+  - mirrored FATs, FSInfo, timestamps, attributes, and the dirty flag (cleared when a volume is dismounted
+    cleanly, and on removable media whenever nothing is open);
+  - names are case-insensitive and case-preserving. 8.3 names written by other systems are read as code page 437.
+- **A portable FAT core** (`drivers/fs/fatcore.c`) that also builds as a Linux program (`build/host/xfat`) for testing.
+- **FastFat driver and NT-style file I/O:**
+  - file objects, volume parameter blocks, mounting through `IRP_MN_MOUNT_VOLUME`;
+  - path lookup that continues from `\GLOBAL??\C:` into the file system;
+  - `NtCreateFile` with all NT dispositions, read/write/append, query/set information (size, attributes, times,
+    rename, delete-on-close), directory listing with wildcards, volume information.
+- **Removable media:** a swapped floppy is detected and remounted, and nothing is ever written to the newly
+  inserted disk.
+- **Drive letters (Mount Manager):**
+  - **A:/B:** floppy drives;
+  - **C:** the boot volume, identified from what the bootloader reports;
+  - **D: onwards:** FAT primary partitions of all disks, then logical partitions, then removable volumes.
+  - Volumes without FAT get no letter. Letters are **sticky**: `C:\XenonOS\Config\mountmgr.cfg` remembers them,
+    so adding a disk does not shift existing letters.
+- **Debug-shell commands** (until the real shell in Phase 1.5): `drives`, `dir`, `type`, `fcrc`, `mkdir`, `del`, `ren`,
+  `copy`, `write`, `attrib`, `mount`, `umount`.
+
+### Phase 1.3: storage
 
 ### Phase 1.3: storage
 
@@ -115,6 +142,7 @@ This downloads Limine on first use, increments `BUILD_NUMBER`, builds the kernel
 | `make run` | Boot the image in QEMU with BIOS (screen in a window, serial in the terminal) |
 | `make run-uefi` | Boot with UEFI firmware (OVMF) on a q35 machine with AHCI |
 | `make test` | Run the automated tests against the current image (does not bump the build number) |
+| `make host` / `make host-test` | Build / test the FAT core as a Linux program (with AddressSanitizer) |
 | `make clean` | Delete `build/` |
 
 To write the image to a USB stick or disk for real hardware (this **erases** the target device):
@@ -148,20 +176,25 @@ tools/symbolize.sh 0xffffffff80003361
 
 ## Tests
 
-`make test` (28 checks) does the following:
+`make test` (41 checks) does the following:
 
 - Checks the build-number counter and checks the disk image with `fsck.fat`.
 - Boots with the kernel self-tests (18 tests) in eight QEMU configurations: BIOS + IDE (legacy PCI ports),
   BIOS + AHCI (PCIe ECAM), UEFI, 4 CPUs, 5 GiB RAM, 48 MiB RAM, no HPET (falls back to the ACPI PM timer),
   and all four USB controller types plus two network cards.
 - Drives the debug shell, typing over COM1 and over the emulated PS/2 keyboard (on BIOS and UEFI).
-- Runs the storage tests (`tools/test-storage.py`). These build disk images with known contents, have the
-  kernel checksum them and write test patterns, then check the images on the host afterwards. The images cover:
-  - IDE: an MBR disk with logical partitions, and a sparse 200 GiB disk accessed beyond the LBA28 limit;
-  - floppies: 1.44 MB, 720 KB and 2.88 MB;
-  - SATA: GPT, a GPT with a damaged primary header, and a superfloppy.
-
-  Every CRC must match the host, every write must land at exactly the right offset, and nothing else may change.
+- Runs the storage tests (`tools/test-storage.py`), which check raw sector reads and writes on IDE, SATA and
+  floppy images against the host.
+- Runs the FAT core host tests (`tools/test-fat-host.py`, also `make host-test`):
+  - 18,000 random operations on FAT12/16/32, checked against an in-memory model with remounts along the way;
+  - `fsck.fat -n` on every result;
+  - an exact comparison with `mtools` in both directions.
+- Runs the FAT and drive-letter tests in QEMU (`tools/test-fat.py`):
+  - drive letters on a disk with FAT16, non-FAT, FAT32 and FAT12 partitions plus a floppy;
+  - files written by `mtools` read back, then writes, appends, copies, renames, deletes, attributes, the expected
+    errors, and a floppy swap;
+  - afterwards `fsck.fat` must find every volume clean and `mtools` must see every change exactly;
+  - a second boot checks persistence and sticky letters, and a third boot covers a GPT disk on SATA.
 - Triggers nine kinds of crash to check the stop screen.
 
 The self-tests cover the memory manager and pool, clocks, interrupt routing, the RTC, PCI, IRQL and DPCs,
@@ -183,9 +216,11 @@ kernel/ke            stop screen, IRQL, DPCs, scheduler, waits, events/mutexes/s
 kernel/ob            object manager: objects, namespace, symbolic links, handles
 kernel/ps            processes and threads
 kernel/ex            kernel log buffer
-kernel/io            I/O manager, disk class, partition manager, block cache
+kernel/io            I/O manager, files and mounting, mount manager, disk class, partitions, block cache
 kernel/kd            kernel debug shell and its keyboard/serial input
 drivers/storage      IDE/ATA, AHCI and floppy drivers
+drivers/fs           FAT core (portable) and the FastFat file system driver
+tests/host           host builds of kernel code (xfat)
 kernel/mm            physical pages, page tables, kernel pool
 kernel/con           framebuffer console, console multiplexer, kernel log
 kernel/rtl           string and printf routines

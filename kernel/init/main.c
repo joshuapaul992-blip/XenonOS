@@ -51,6 +51,8 @@ void CcStartLazyWriter(void);
 void AtaInitialize(void);
 void AhciInitialize(void);
 void FdcInitialize(void);
+void FastFatInitialize(void);
+void MountMgrInitialize(void);
 static void *g_boot_stack;
 NORETURN void KiSystemStartup(void);
 
@@ -72,6 +74,8 @@ SECTION(".limine_requests") USED static volatile struct limine_executable_cmdlin
     .id = LIMINE_EXECUTABLE_CMDLINE_REQUEST, .revision = 0 };
 SECTION(".limine_requests") USED static volatile struct limine_rsdp_request g_rsdp_req = {
     .id = LIMINE_RSDP_REQUEST, .revision = 0 };
+SECTION(".limine_requests") USED static volatile struct limine_kernel_file_request g_kfile_req = {
+    .id = LIMINE_KERNEL_FILE_REQUEST, .revision = 0 };
 SECTION(".limine_requests") USED static volatile struct limine_kernel_address_request g_kaddr_req = {
     .id = LIMINE_KERNEL_ADDRESS_REQUEST, .revision = 0 };
 
@@ -129,6 +133,17 @@ static void capture_loader_block(void)
             .GreenSize = f->green_mask_size, .GreenShift = f->green_mask_shift,
             .BlueSize = f->blue_mask_size, .BlueShift = f->blue_mask_shift,
         };
+    }
+
+    /* The partition the kernel was loaded from becomes drive C:. */
+    if (g_kfile_req.response && g_kfile_req.response->kernel_file) {
+        struct limine_file *kf = g_kfile_req.response->kernel_file;
+        lb->HaveBootPartition = kf->partition_index != 0;
+        lb->BootPartitionIndex = kf->partition_index;
+        lb->BootMbrDiskId = kf->mbr_disk_id;
+        memcpy(lb->BootGptPartUuid, &kf->gpt_part_uuid, 16);
+        static const uint8_t zero[16];
+        lb->BootGpt = memcmp(lb->BootGptPartUuid, zero, 16) != 0;
     }
 
     struct limine_executable_cmdline_response *cl = g_cmdline_req.response;
@@ -285,13 +300,15 @@ NORETURN static void KiSystemStartupPhase1(void)
     AhciInitialize();
     FdcInitialize();
     CcStartLazyWriter();
+    FastFatInitialize();
+    MountMgrInitialize();
 
     maybe_crash();
 
     if (RtlGetCmdlineOption(KiGetCommandLine(), "xenon.selftest", NULL, 0))
         KiRunSelfTests();
 
-    ConPrint("\nPhase 1.3 complete: I/O manager, IDE, SATA and floppy drivers, partitions and disk cache are up.\n");
+    ConPrint("\nPhase 1.4 complete: FAT12/16/32 file system and drive letters are up.\n");
     ConPrint("The shell (C:/#) arrives in Phase 1.5.\n");
     if (g_test_mode && !RtlGetCmdlineOption(KiGetCommandLine(), "xenon.interactive", NULL, 0))
         HalDebugExit(XENON_EXIT_HALTED);

@@ -8,6 +8,7 @@
 #include "console.h"
 
 OBJECT_TYPE *IoDriverObjectType, *IoDeviceObjectType;
+void IopInitFileSystem(void);
 
 static NTSTATUS invalid_request(DEVICE_OBJECT *dev, IRP *irp)
 {
@@ -23,6 +24,8 @@ void IoInitSystem(void)
     if (!NT_SUCCESS(ObCreateObjectType("Driver", NULL, 'IoDr', &IoDriverObjectType)) ||
         !NT_SUCCESS(ObCreateObjectType("Device", NULL, 'IoDv', &IoDeviceObjectType)))
         KeBugCheckEx(PHASE1_INITIALIZATION_FAILED, 0x10, 0, 0, 0);
+    IoDeviceObjectType->ParseObjects = true;    /* paths continue into file systems */
+    IopInitFileSystem();
 }
 
 NTSTATUS IoCreateDriver(const char *name, NTSTATUS (*entry)(DRIVER_OBJECT *driver))
@@ -212,7 +215,7 @@ void IoCompleteRequest(IRP *irp)
         KeSetEvent(ev);
 }
 
-static NTSTATUS send_and_wait(DEVICE_OBJECT *device, IRP *irp, uint64_t *information)
+NTSTATUS IopSendAndWait(DEVICE_OBJECT *device, IRP *irp, uint64_t *information)
 {
     KEVENT ev;
     IO_STATUS_BLOCK iosb = { STATUS_PENDING, 0 };
@@ -244,7 +247,7 @@ NTSTATUS IoSynchronousReadWrite(DEVICE_OBJECT *device, bool write, void *buffer,
     s->MajorFunction = write ? IRP_MJ_WRITE : IRP_MJ_READ;
     s->Parameters.Read.Length = length;
     s->Parameters.Read.ByteOffset = offset;
-    return send_and_wait(device, irp, transferred);
+    return IopSendAndWait(device, irp, transferred);
 }
 
 NTSTATUS IoSynchronousDeviceControl(DEVICE_OBJECT *device, uint32_t code, void *in, uint32_t in_len,
@@ -270,7 +273,7 @@ NTSTATUS IoSynchronousDeviceControl(DEVICE_OBJECT *device, uint32_t code, void *
     s->Parameters.DeviceIoControl.InputBufferLength = in_len;
     s->Parameters.DeviceIoControl.OutputBufferLength = out_len;
     uint64_t info = 0;
-    NTSTATUS st = send_and_wait(device, irp, &info);
+    NTSTATUS st = IopSendAndWait(device, irp, &info);
     if (NT_SUCCESS(st) && out_len)
         memcpy(out, buf, MIN(info, out_len));
     if (returned)
@@ -287,11 +290,12 @@ NTSTATUS IoSynchronousFlush(DEVICE_OBJECT *device)
     if (!irp)
         return STATUS_INSUFFICIENT_RESOURCES;
     IoGetNextIrpStackLocation(irp)->MajorFunction = IRP_MJ_FLUSH_BUFFERS;
-    return send_and_wait(device, irp, NULL);
+    return IopSendAndWait(device, irp, NULL);
 }
 
 void IoShutdownSystem(void)
 {
+    MountMgrShutdown();
     NTSTATUS st = CcFlushAll();
     for (unsigned i = 0; i < DiskCount(); i++)
         IoSynchronousFlush(DiskGet(i));

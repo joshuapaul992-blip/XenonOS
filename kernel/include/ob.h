@@ -26,7 +26,9 @@ typedef uint32_t HANDLE;           /* multiples of 4; 0 is never a valid handle 
 
 typedef struct OBJECT_TYPE {
     char Name[24];
-    void (*DeleteProcedure)(void *object);
+    void (*DeleteProcedure)(void *object);      /* last reference gone */
+    void (*CloseProcedure)(void *object);       /* last handle closed */
+    bool ParseObjects;                          /* name lookups stop here and return the rest */
     uint32_t PoolTag;
     volatile uint32_t TotalObjects;
     volatile uint32_t TotalHandles;
@@ -53,6 +55,11 @@ void ObMakeTemporaryObject(void *object);
 void ObReferenceObject(void *object);
 void ObDereferenceObject(void *object);
 NTSTATUS ObReferenceObjectByName(const char *path, uint32_t flags, OBJECT_TYPE *type, void **object);
+/* Like ObReferenceObjectByName, but a lookup that reaches an object whose
+   type has ParseObjects (devices) stops there and returns the rest of the
+   path in 'remaining' (without a leading separator; "" if none). */
+NTSTATUS ObReferenceObjectByNameEx(const char *path, uint32_t flags, void **object, char *remaining,
+                                   size_t remaining_size);
 
 /* Handles in the current process's handle table. */
 NTSTATUS ObCreateHandle(void *object, HANDLE *handle);

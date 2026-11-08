@@ -49,6 +49,12 @@ typedef struct {
     char     BootloaderVersion[32];
     const char *FirmwareName;
     bool     Uefi;
+    /* Where the kernel file was loaded from (to find drive C:). */
+    bool     HaveBootPartition;
+    uint32_t BootPartitionIndex;    /* 1-based; MBR: 1-4 primary, 5+ logical */
+    uint32_t BootMbrDiskId;         /* MBR disk signature, 0 if GPT */
+    uint8_t  BootGptPartUuid[16];
+    bool     BootGpt;
 } LOADER_BLOCK;
 
 extern LOADER_BLOCK KeLoaderBlock;

@@ -166,7 +166,7 @@ int64_t ObGetHandleCount(void *object) { return header(object)->HandleCount; }
 
 /* Split "\A\B\Name" into the directory "\A\B" (looked up) and "Name". */
 static NTSTATUS lookup(const char *path, uint32_t flags, OBJECT_HEADER **out, char *leaf,
-                       size_t *leaf_len, bool want_parent);
+                       size_t *leaf_len, bool want_parent, char *remaining, size_t remaining_size);
 
 NTSTATUS ObInsertObjectName(void *object, const char *path, uint32_t flags)
 {
@@ -176,7 +176,7 @@ NTSTATUS ObInsertObjectName(void *object, const char *path, uint32_t flags)
     OBJECT_HEADER *dirh;
     char leaf[256];
     size_t leaf_len;
-    NTSTATUS st = lookup(path, 0, &dirh, leaf, &leaf_len, true);
+    NTSTATUS st = lookup(path, 0, &dirh, leaf, &leaf_len, true, NULL, 0);
     if (!NT_SUCCESS(st))
         return st;
     if (dirh->Type != ObDirectoryObjectType) {
@@ -256,8 +256,11 @@ void ObpAdjustHandleCount(void *object, int delta)
         if (delta > 0) __atomic_add_fetch(&h->Type->TotalHandles, 1, __ATOMIC_RELAXED);
         else __atomic_sub_fetch(&h->Type->TotalHandles, 1, __ATOMIC_RELAXED);
     }
-    if (n == 0 && delta < 0)
+    if (n == 0 && delta < 0) {
+        if (h->Type && h->Type->CloseProcedure)
+            h->Type->CloseProcedure(object);
         ObpLastHandleClosed(object);
+    }
 }
 
 /*
@@ -266,8 +269,10 @@ void ObpAdjustHandleCount(void *object, int delta)
  * referenced object header.
  */
 static NTSTATUS lookup(const char *path, uint32_t flags, OBJECT_HEADER **out, char *leaf,
-                       size_t *leaf_len, bool want_parent)
+                       size_t *leaf_len, bool want_parent, char *remaining, size_t remaining_size)
 {
+    if (remaining && remaining_size)
+        remaining[0] = 0;
     if (want_parent) {
         leaf[0] = 0;
         *leaf_len = 0;
@@ -292,6 +297,15 @@ static NTSTATUS lookup(const char *path, uint32_t flags, OBJECT_HEADER **out, ch
     for (;;) {
         while (is_sep(*p))
             p++;
+        if (remaining && h->Type && h->Type->ParseObjects) {
+            /* A device: the rest of the path belongs to it (its file system). */
+            if (strlen(p) >= remaining_size) {
+                st = STATUS_OBJECT_NAME_INVALID;
+                goto out;
+            }
+            strlcpy(remaining, p, remaining_size);
+            break;
+        }
         if (!*p)
             break;                                     /* path ended on a directory */
         const char *start = p;
@@ -353,7 +367,7 @@ out:
 NTSTATUS ObReferenceObjectByName(const char *path, uint32_t flags, OBJECT_TYPE *type, void **object)
 {
     OBJECT_HEADER *h;
-    NTSTATUS st = lookup(path, flags, &h, NULL, NULL, false);
+    NTSTATUS st = lookup(path, flags, &h, NULL, NULL, false, NULL, 0);
     if (!NT_SUCCESS(st))
         return st;
     if (type && h->Type != type) {
@@ -362,6 +376,16 @@ NTSTATUS ObReferenceObjectByName(const char *path, uint32_t flags, OBJECT_TYPE *
     }
     *object = body(h);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS ObReferenceObjectByNameEx(const char *path, uint32_t flags, void **object, char *remaining,
+                                   size_t remaining_size)
+{
+    OBJECT_HEADER *h;
+    NTSTATUS st = lookup(path, flags, &h, NULL, NULL, false, remaining, remaining_size);
+    if (NT_SUCCESS(st))
+        *object = body(h);
+    return st;
 }
 
 size_t ObQueryNameString(void *object, char *buf, size_t size)

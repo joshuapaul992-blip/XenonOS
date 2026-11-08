@@ -81,6 +81,7 @@ void DiskSetMedia(DEVICE_OBJECT *disk, bool present, uint64_t sectors, uint32_t 
     bool changed = present != x->MediaPresent || sectors != x->SectorCount || bps != x->BytesPerSector;
     if (x->Cache)
         CcInvalidate(x->Cache);
+    x->MediaChangeCount++;             /* any call means the medium may be different */
     x->MediaPresent = present;
     x->SectorCount = present ? sectors : 0;
     if (bps)
@@ -227,6 +228,7 @@ static NTSTATUS disk_ioctl(DEVICE_OBJECT *dev, IRP *irp)
         i.WriteProtected = x->WriteProtected;
         i.DiskNumber = x->Number;
         i.Floppy = x->Params.Floppy;
+        i.MediaChangeCount = x->MediaChangeCount;
         memcpy(buf, &i, sizeof(i));
         return complete(irp, STATUS_SUCCESS, sizeof(i));
     }
@@ -317,6 +319,7 @@ NTSTATUS DiskCreate(const DISK_PARAMS *p, DEVICE_OBJECT **out)
     if (p->Floppy) {
         snprintf(link, sizeof(link), "\\GLOBAL??\\Floppy%u", number);
         IoCreateSymbolicLink(link, name);
+        IoMarkVolumeDevice(dev);       /* a floppy is a volume: file systems mount on it */
     } else {
         snprintf(link, sizeof(link), "\\Device\\Harddisk%u\\Partition0", number);
         IoCreateSymbolicLink(link, name);
