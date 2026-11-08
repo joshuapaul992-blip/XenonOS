@@ -1,5 +1,7 @@
 # XenonOS
 
+An OS that's a mix of Linux and Windows (warning: fully vibe-coded, use at your own risk).
+
 A from-scratch x86-64 operating system with a Windows NT-style kernel, native
 FAT12/16/32 drive letters (A:–Z:), and a smart POSIX-style shell.
 
